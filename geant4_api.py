@@ -377,7 +377,7 @@ def run_geant4_simulation(sim_request: SimulationRequest, output_dir: str, image
     
     try:
         # Run Geant4 simulation
-        geant4_cmd = ['/root/geant4-v11.3.2-install/bin/', macro_path]
+        geant4_cmd = ['/root/geant4-v11.3.2-install/bin/geant4/', macro_path]
         
         logger.info(f"Running Geant4 command: {' '.join(geant4_cmd)}")
         
