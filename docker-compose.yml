@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  geant4-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./outputs:/app/outputs
+      - /root/geant4-v11.3.2-install:/root/geant4-v11.3.2-install
+      - ./geant4_api.py:/app/geant4_api.py:ro  # Read-only mount for safety
+    environment:
+      - G4INSTALL=/root/geant4-v11.3.2-install
+      - PATH=/root/geant4-v11.3.2-install/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - LD_LIBRARY_PATH=/root/geant4-v11.3.2-install/lib
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      # Traefik labels for automatic reverse proxy setup
+      - "traefik.enable=true"
+      - "traefik.http.routers.geant4-api.rule=Host(`n8n.srv882475.hstgr.cloud`) && PathPrefix(`/api/geant4`)"
+      - "traefik.http.services.geant4-api.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.geant4-strip.stripprefix.prefixes=/api/geant4"
+      - "traefik.http.routers.geant4-api.middlewares=geant4-strip"
+
+networks:
+  default:
+    external:
+      name: root_default  # Connect to your existing Traefik network
