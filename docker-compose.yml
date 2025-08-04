@@ -2,30 +2,84 @@ version: '3.8'
 
 services:
   geant4-api:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
+      # Output directories for images and temporary files
       - ./outputs:/app/outputs
-      - /root/geant4-v11.3.2-install:/root/geant4-v11.3.2-install
-      - ./geant4_api.py:/app/geant4_api.py:ro  # Read-only mount for safety
+      
+      # Mount Geant4 installation (read-only)
+      - /root/geant4-v11.3.2-install:/root/geant4-v11.3.2-install:ro
+      
+      # Mount source code (read-only for safety)
+      - ./geant4_api.py:/app/geant4_api.py:ro
+      
+      # Mount for X11 socket (if needed for debugging)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      
     environment:
+      # Geant4 environment
       - G4INSTALL=/root/geant4-v11.3.2-install
       - PATH=/root/geant4-v11.3.2-install/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - LD_LIBRARY_PATH=/root/geant4-v11.3.2-install/lib
+      
+      # X11 and OpenGL environment for headless rendering
+      - DISPLAY=:99
+      - MESA_GL_VERSION_OVERRIDE=3.3
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - XVFB_RES=1024x768x24
+      
+      # Geant4 data directories (if you have them)
+      - G4NEUTRONHPDATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4NDL4.7
+      - G4LEDATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4EMLOW8.2
+      - G4LEVELGAMMADATA=/root/geant4-v11.3.2-install/share/Geant4/data/PhotonEvaporation5.7
+      - G4RADIOACTIVEDATA=/root/geant4-v11.3.2-install/share/Geant4/data/RadioactiveDecay5.6
+      - G4PARTICLEXSDATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4PARTICLEXS4.0
+      - G4PIIDATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4PII1.3
+      - G4REALSURFACEDATA=/root/geant4-v11.3.2-install/share/Geant4/data/RealSurface2.2
+      - G4SAIDXSDATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4SAIDDATA2.0
+      - G4ABLADATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4ABLA3.1
+      - G4INCLDATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4INCL1.0
+      - G4ENSDFSTATEDATA=/root/geant4-v11.3.2-install/share/Geant4/data/G4ENSDFSTATE2.3
+    
+    # Security and resource limits
+    security_opt:
+      - seccomp:unconfined  # Needed for some OpenGL operations
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    
     restart: unless-stopped
+    
+    # Enhanced health check
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
+      start_period: 60s
+    
+    # Traefik labels for reverse proxy
     labels:
-      # Traefik labels for automatic reverse proxy setup
       - "traefik.enable=true"
       - "traefik.http.routers.geant4-api.rule=Host(`n8n.srv882475.hstgr.cloud`) && PathPrefix(`/api/geant4`)"
       - "traefik.http.services.geant4-api.loadbalancer.server.port=8000"
       - "traefik.http.middlewares.geant4-strip.stripprefix.prefixes=/api/geant4"
       - "traefik.http.routers.geant4-api.middlewares=geant4-strip"
+      
+      # Additional middleware for larger file uploads (images)
+      - "traefik.http.middlewares.geant4-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.routers.geant4-api.middlewares=geant4-strip,geant4-headers"
 
 networks:
   default:
