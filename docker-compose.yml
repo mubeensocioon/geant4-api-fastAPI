@@ -3,31 +3,36 @@ version: '3.8'
 services:
   geant4-api:
     build: .
-    ports:
-      - "8000:8000"
     volumes:
+      # Mount your host Geant4 installation into the container
+      - /root/geant4-v11.3.2-install:/root/geant4-v11.3.2-install:ro
+      # Mount outputs directory for file persistence
       - ./outputs:/app/outputs
-      - /root/geant4-v11.3.2-install:/root/geant4-v11.3.2-install
-      - ./geant4_api.py:/app/geant4_api.py:ro  # Read-only mount for safety
     environment:
       - G4INSTALL=/root/geant4-v11.3.2-install
-      - PATH=/root/geant4-v11.3.2-install/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      - LD_LIBRARY_PATH=/root/geant4-v11.3.2-install/lib
+      - PATH=/root/geant4-v11.3.2-install/bin:${PATH}
+      - LD_LIBRARY_PATH=/root/geant4-v11.3.2-install/lib:${LD_LIBRARY_PATH}
+      - QT_QPA_PLATFORM=offscreen
+      - DISPLAY=:99
     restart: unless-stopped
+    networks:
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.geant4-api.rule=Host(`n8n.srv882475.hstgr.cloud`) && PathPrefix(`/api/geant4/`)"
+      - "traefik.http.routers.geant4-api.tls=true"
+      - "traefik.http.routers.geant4-api.tls.certresolver=lets-encrypt"
+      - "traefik.http.services.geant4-api.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.geant4-api-stripprefix.stripprefix.prefixes=/api/geant4"
+      - "traefik.http.routers.geant4-api.middlewares=geant4-api-stripprefix"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    labels:
-      # Traefik labels for automatic reverse proxy setup
-      - "traefik.enable=true"
-      - "traefik.http.routers.geant4-api.rule=Host(`n8n.srv882475.hstgr.cloud`) && PathPrefix(`/api/geant4`)"
-      - "traefik.http.services.geant4-api.loadbalancer.server.port=8000"
-      - "traefik.http.middlewares.geant4-strip.stripprefix.prefixes=/api/geant4"
-      - "traefik.http.routers.geant4-api.middlewares=geant4-strip"
+      start_period: 40s
 
 networks:
   default:
-    external:
-      name: root_default  # Connect to your existing Traefik network
+    external: true
+    name: root_default
